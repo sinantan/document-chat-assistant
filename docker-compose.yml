@@ -70,7 +70,7 @@ services:
       - MONGO_DB=document_chat
       - REDIS_HOST=redis
       - REDIS_PASSWORD=
-      - GEMINI_API_KEY=AIzaSyBA18Mrtlb7K76Fd-euxjrZNHFvdMH-YRQ
+      - GEMINI_API_KEY=
       - GEMINI_MODEL=gemini-2.5-flash
       - MAX_FILE_SIZE_MB=50
       - RATE_LIMIT_REQUESTS=100
