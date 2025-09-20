@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: document-chat-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 7v3vYsnH1I9u8N33Byh4xSE1Q
+      POSTGRES_DB: document_chat
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d document_chat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7.0
+    container_name: document-chat-mongo
+    environment:
+      MONGO_INITDB_DATABASE: document_chat
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: document-chat-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: document-chat-app
+    environment:
+      - DEBUG=true
+      - SECRET_KEY=xcf2gDfgrHtce2gThFEfRwfsr44cD9
+      - JWT_SECRET_KEY=vx8B45N3C1Xxbm
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=7v3vYsnH1I9u8N33Byh4xSE1Q
+      - POSTGRES_DB=document_chat
+      - MONGO_HOST=mongodb
+      - MONGO_DB=document_chat
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=
+      - GEMINI_API_KEY=AIzaSyBA18Mrtlb7K76Fd-euxjrZNHFvdMH-YRQ
+      - GEMINI_MODEL=gemini-2.5-flash
+      - MAX_FILE_SIZE_MB=50
+      - RATE_LIMIT_REQUESTS=100
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "
+        ./docker/wait-for.sh postgres:5432 -- echo 'PostgreSQL is ready' &&
+        ./docker/wait-for.sh mongodb:27017 -- echo 'MongoDB is ready' &&
+        ./docker/wait-for.sh redis:6379 -- echo 'Redis is ready' &&
+        poetry run alembic upgrade head &&
+        poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: document-chat-network
